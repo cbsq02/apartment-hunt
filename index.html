@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apartment hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--ground:#F6F4EF;--ink:#1F2A2E;--muted:#4B5563;--line:#DAD5CA;--teal:#0F766E;--tealdark:#0B5D57}
+*{box-sizing:border-box}
+body{margin:0;font-family:'DM Sans',system-ui,sans-serif;background:var(--ground);color:var(--ink)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid #0F766E;outline-offset:2px}
+#app{height:100dvh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:#fff}
+header h1{font-size:20px;margin:0;flex:1}
+.btn{min-height:44px;padding:0 14px;border:1px solid #C9C3B6;border-radius:12px;background:#fff;cursor:pointer;font-size:14px;font-weight:500}
+.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}
+.btn.danger{color:#9B1C1C;border:0;background:none}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+#main{flex:1;min-height:0;display:flex;flex-direction:column}
+#mapwrap{position:relative;flex:0 0 42%}
+#map{position:absolute;inset:0}
+#map.picking{cursor:crosshair}
+#add{position:absolute;right:12px;bottom:20px;z-index:1000;min-height:48px;border-radius:24px;padding:0 20px;box-shadow:0 2px 8px #0003}
+#hint{position:absolute;left:12px;top:64px;z-index:1000;background:#fff;border-radius:10px;padding:8px 12px;font-size:14px;display:none;box-shadow:0 2px 8px #0003}
+#side{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;border-radius:18px 18px 0 0;margin-top:-14px;background:var(--ground);position:relative;z-index:500}
+.count{font-size:13px;color:var(--muted)}
+.card{display:flex;gap:12px;padding:12px;background:#fff;border:1px solid #E6E1D6;border-radius:14px;cursor:pointer;text-align:left;width:100%}
+.thumb{width:72px;height:72px;border-radius:10px;background:#E4EBE6 center/cover;flex:none}
+.card .body{flex:1;min-width:0}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.card strong{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub{font-size:13px;color:var(--muted);margin-top:2px}
+.chip{display:inline-block;font-size:12px;font-weight:500;padding:3px 8px;border-radius:99px;margin-top:8px}
+.pick{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:8px;float:right;min-height:24px}
+.empty{padding:24px 8px;text-align:center;color:var(--muted);font-size:15px}
+.pin{position:absolute;transform:translate(-50%,-100%);color:#fff;font-weight:700;font-size:13px;padding:5px 10px;border-radius:99px;white-space:nowrap;box-shadow:0 1px 4px #0006;border:2px solid #fff}
+dialog{border:0;border-radius:18px;padding:0;width:min(560px,calc(100vw - 16px));max-height:92dvh;color:var(--ink);background:var(--ground)}
+dialog::backdrop{background:#0008}
+dialog form,dialog .dbody{padding:16px;display:flex;flex-direction:column;gap:14px}
+dialog h2{margin:0;font-size:20px}
+.two{display:flex;gap:12px}.two>*{flex:1;min-width:0}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--muted)}
+input,select,textarea{min-height:44px;border:1px solid #C9C3B6;border-radius:10px;padding:0 12px;background:#fff;font-size:16px;width:100%}
+textarea{padding:10px 12px;min-height:76px;resize:vertical}
+.stars{display:flex;gap:6px}
+.stars button{width:44px;height:44px;border:1px solid #C9C3B6;border-radius:10px;background:#fff;cursor:pointer;font-weight:500}
+.stars button[aria-pressed=true]{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:700}
+.photos{display:flex;flex-wrap:wrap;gap:8px}
+.ph{position:relative;width:82px;height:82px;border-radius:10px;background:center/cover}
+.ph button{position:absolute;top:-6px;right:-6px;width:28px;height:28px;border-radius:50%;border:0;background:#1F2A2E;color:#fff;cursor:pointer}
+.addph{width:82px;height:82px;border:1px dashed #6B7280;border-radius:10px;background:none;font-size:13px;color:var(--muted);cursor:pointer}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.actions .primary{flex:1}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 6px;border-top:1px solid #E6E1D6;text-align:center;vertical-align:top}
+th:first-child,td:first-child{text-align:left;font-size:12px;color:var(--muted);width:84px}
+td.best{background:#D5EEEA;color:var(--tealdark);font-weight:700;border-radius:8px}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1F2A2E;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;display:none;z-index:3000}
+#city{position:absolute;left:12px;top:12px;z-index:1000;font-weight:700;box-shadow:0 2px 8px #0003}
+#citymenu{position:absolute;left:12px;top:62px;z-index:1000;background:#fff;border-radius:12px;box-shadow:0 4px 16px #0004;max-height:calc(100% - 80px);overflow:auto;min-width:210px;padding:6px}
+.cityhd{font-size:12px;color:var(--muted);padding:8px 12px 2px}
+.cityopt{display:block;width:100%;min-height:44px;text-align:left;border:0;background:none;padding:0 12px;border-radius:8px;cursor:pointer;font-size:15px}
+.cityopt:hover{background:#F6F4EF}
+.cityopt[aria-current=true]{background:#D5EEEA;color:#0B5D57;font-weight:700}
+.filters{display:flex;gap:6px;overflow-x:auto;flex:none;padding-bottom:2px}
+.fchip{flex:none;min-height:36px;padding:0 14px;border:1px solid #C9C3B6;border-radius:99px;background:#fff;font-size:13px;font-weight:500;cursor:pointer}
+.fchip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#fff}
+.pop{min-width:210px;font-family:'DM Sans',sans-serif;color:var(--ink)}
+.pop img{width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:6px;display:block}
+.pop strong{font-size:15px;display:block}
+.links{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px}
+.links a{color:#0B5D57;font-weight:500}
+.more{margin-top:10px;width:100%}
+details{font-size:14px;line-height:1.5}summary{cursor:pointer;min-height:32px}
+pre{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;overflow:auto;font-size:12px}
+@media(min-width:820px){#main{flex-direction:row-reverse}#mapwrap{flex:1}#side{flex:0 0 400px;border-radius:0;margin:0;border-right:1px solid var(--line)}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Apartment hunt</h1>
+    <button class="btn" id="cmp" disabled>Compare</button>
+    <button class="btn" id="share">Share</button>
+    <input type="file" id="impfile" accept="application/json" hidden>
+  </header>
+  <div id="main">
+    <div id="mapwrap">
+      <div id="map"></div>
+      <div id="hint" role="status">Tap the map to place the pin</div>
+      <button class="btn" id="city" aria-haspopup="true" aria-expanded="false"></button>
+      <div id="citymenu" hidden></div>
+      <button class="btn primary" id="add">+ Add place</button>
+    </div>
+    <section id="side" aria-label="Places"></section>
+  </div>
+</div>
+
+<dialog id="dlg"></dialog>
+<div id="toast" role="status"></div>
+
+<script>
+const KEY = 'apartment-hunt-v1';
+const STATUS = {
+  interested: {label:'Interested', bg:'#D5EEEA', fg:'#0B5D57', pin:'#0F766E'},
+  offer:      {label:'Offer made', bg:'#FBE8C4', fg:'#7A4A00', pin:'#B45309'},
+  discarded:  {label:'Discarded',  bg:'#E5E7EB', fg:'#374151', pin:'#6B7280'}
+};
+let places = [];
+try { places = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { places = []; }
+let picking = false, draft = null, selected = new Set(), filter = 'all';
+const MAXPH = 5;
+const shown = () => places.filter(p => filter === 'all' || p.status === filter);
+const markers = {};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => n || n === 0 ? '$' + Number(n).toLocaleString('en-US') : '–';
+const short = n => !n ? '?' : n >= 1000 ? '$' + Math.round(n / 1000) + 'k' : '$' + n;
+const perM2 = p => p.price && p.size ? Math.round(p.price / p.size) : null;
+const today = () => new Date().toISOString().slice(0, 10);
+
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(places)); return true; }
+  catch (e) { alert('Browser storage is full. Export your data, then remove some photos.'); return false; }
+}
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', 2600);
+}
+
+/* ---------- Map (OpenStreetMap tiles via Leaflet) ---------- */
+const VKEY = 'apartment-hunt-view';
+let view = null; try { view = JSON.parse(localStorage.getItem(VKEY) || 'null'); } catch (e) {}
+let curCity = (view && view.city) || 'Cuenca';
+const map = L.map('map', {zoomControl: false}).setView(view ? [view.lat, view.lng] : [-2.9001, -79.0059], view ? view.z : 13);
+L.control.zoom({position: 'topright'}).addTo(map);
+map.on('moveend', () => {
+  const c = map.getCenter();
+  try { localStorage.setItem(VKEY, JSON.stringify({lat: c.lat, lng: c.lng, z: map.getZoom(), city: curCity})); } catch (e) {}
+});
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+});
+const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19, attribution: 'Tiles &copy; Esri'
+});
+osm.addTo(map);
+L.control.layers({'OpenStreetMap': osm, 'Esri streets': esri}, null, {position: 'bottomleft'}).addTo(map);
+let tileErrors = 0;
+osm.on('tileerror', () => {
+  // OpenStreetMap blocks pages opened straight from a file in some browsers; switch to the fallback map.
+  if (++tileErrors === 3 && map.hasLayer(osm)) { map.removeLayer(osm); esri.addTo(map); toast('OpenStreetMap blocked the tiles, using the Esri map instead'); }
+});
+
+map.on('click', e => {
+  if (!picking) return;
+  setPicking(false);
+  draft.lat = +e.latlng.lat.toFixed(6); draft.lng = +e.latlng.lng.toFixed(6);
+  openForm(draft);
+});
+const POPULAR = [['Cuenca', -2.9001, -79.0059], ['Quito', -0.1807, -78.4678], ['Guayaquil', -2.1894, -79.8891]];
+const MORE = [['Ambato', -1.2417, -78.6197], ['Baños', -1.3964, -78.4247], ['Esmeraldas', 0.9592, -79.6539], ['Ibarra', 0.3517, -78.1223],
+  ['Loja', -3.9931, -79.2042], ['Machala', -3.2581, -79.9554], ['Manta', -0.9677, -80.7089], ['Portoviejo', -1.0546, -80.4545],
+  ['Riobamba', -1.6636, -78.6546], ['Salinas', -2.2146, -80.9535], ['Santo Domingo', -0.2530, -79.1754]];
+function drawCityMenu() {
+  const opt = list => list.map(([n]) => `<button class="cityopt" data-city="${n}" ${n === curCity ? 'aria-current="true"' : ''}>${n}</button>`).join('');
+  $('#city').textContent = curCity + ' ▾';
+  $('#citymenu').innerHTML = '<div class="cityhd">Popular</div>' + opt(POPULAR) + '<div class="cityhd">More cities</div>' + opt(MORE);
+}
+function toggleCity(open) {
+  $('#citymenu').hidden = !open; $('#city').setAttribute('aria-expanded', open);
+}
+$('#city').onclick = () => toggleCity($('#citymenu').hidden);
+$('#citymenu').onclick = e => {
+  const b = e.target.closest('[data-city]'); if (!b) return;
+  const c = [...POPULAR, ...MORE].find(x => x[0] === b.dataset.city);
+  curCity = c[0]; drawCityMenu(); toggleCity(false); map.flyTo([c[1], c[2]], 13);
+};
+map.on('click', () => toggleCity(false));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') toggleCity(false); });
+drawCityMenu();
+
+function setPicking(on) {
+  picking = on;
+  $('#map').classList.toggle('picking', on);
+  $('#hint').style.display = on ? 'block' : 'none';
+  $('#add').textContent = on ? 'Cancel' : '+ Add place';
+}
+$('#add').onclick = () => {
+  if (picking) { setPicking(false); draft = null; return; }
+  draft = blank(); setPicking(true);
+};
+const blank = () => ({id: 'p' + Date.now(), name:'', price:'', size:'', beds:'', baths:'', status:'interested',
+  rating:0, visit: today(), contact:'', link:'', pros:'', cons:'', photos:[], lat:null, lng:null});
+
+const gLinks = p => `<div class="links"><a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.lat},${p.lng}">Google Maps</a><a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}">Directions</a><a target="_blank" rel="noopener" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}">Street View</a></div>`;
+
+function popupNode(p) {
+  const s = STATUS[p.status] || STATUS.interested, d = document.createElement('div');
+  d.className = 'pop';
+  d.innerHTML = `${p.photos[0] ? `<img src="${p.photos[0]}" alt="">` : ''}<strong>${esc(p.name || 'Untitled')}</strong>
+    <div class="sub">${money(p.price)}${p.size ? ' · ' + p.size + ' m²' : ''}${p.beds ? ' · ' + p.beds + ' bd' : ''}${p.rating ? ' · ' + p.rating + '/5' : ''}</div>
+    <span class="chip" style="background:${s.bg};color:${s.fg};margin-top:6px">${s.label}</span>${gLinks(p)}
+    <button class="btn primary more">More details</button>`;
+  d.querySelector('.more').onclick = () => { map.closePopup(); openForm(p); };
+  return d;
+}
+
+function drawMarkers() {
+  Object.values(markers).forEach(m => m.remove());
+  shown().forEach(p => {
+    const s = STATUS[p.status] || STATUS.interested;
+    const icon = L.divIcon({className:'', iconSize:[0,0],
+      html: `<span class="pin" style="background:${s.pin}">${esc(short(+p.price))}</span>`});
+    markers[p.id] = L.marker([p.lat, p.lng], {icon, title: p.name}).addTo(map)
+      .on('click', () => { if (!picking) L.popup({offset:[0,-28]}).setLatLng([p.lat, p.lng]).setContent(popupNode(p)).openOn(map); });
+  });
+}
+
+/* ---------- List ---------- */
+function drawList() {
+  const side = $('#side');
+  const sorted = [...shown()].sort((a, b) => (b.visit || '').localeCompare(a.visit || ''));
+  const chips = places.length ? `<div class="filters" role="group" aria-label="Filter by status">${[['all','All'], ...Object.entries(STATUS).map(([k, v]) => [k, v.label])].map(([k, l]) => `<button class="fchip" data-f="${k}" aria-pressed="${filter === k}">${l}</button>`).join('')}</div>` : '';
+  if (!sorted.length) {
+    side.innerHTML = chips + (places.length ? '<div class="empty">No places with this status.</div>'
+      : '<div class="empty">No places yet. Tap <strong>+ Add place</strong>, then tap the map where the apartment is.</div>');
+    return;
+  }
+  side.innerHTML = chips + `<div class="count">${sorted.length} place${sorted.length > 1 ? 's' : ''} visited</div>` + sorted.map(p => {
+    const s = STATUS[p.status] || STATUS.interested, m2 = perM2(p);
+    const bg = p.photos[0] ? `background-image:url('${p.photos[0]}')` : '';
+    return `<div class="card" data-id="${p.id}" tabindex="0" role="button" aria-label="Edit ${esc(p.name)}">
+      <div class="thumb" style="${bg}"></div>
+      <div class="body">
+        <div class="row"><strong>${esc(p.name || 'Untitled')}</strong><span class="sub">${p.rating ? p.rating + '/5' : ''}</span></div>
+        <div class="sub">${money(p.price)}${p.size ? ' · ' + p.size + ' m²' : ''}${p.beds ? ' · ' + p.beds + ' bd' : ''}${p.baths ? ' · ' + p.baths + ' ba' : ''}${m2 ? ' · $' + m2.toLocaleString('en-US') + '/m²' : ''}</div>
+        <span class="chip" style="background:${s.bg};color:${s.fg}">${s.label}</span>
+        <label class="pick" data-stop><input type="checkbox" data-cmp="${p.id}" ${selected.has(p.id) ? 'checked' : ''} style="width:20px;min-height:20px"> Compare</label>
+      </div></div>`;
+  }).join('');
+}
+$('#side').addEventListener('click', e => {
+  const fc = e.target.closest('[data-f]');
+  if (fc) { filter = fc.dataset.f; refresh(); return; }
+  const cb = e.target.closest('[data-cmp]');
+  if (cb) {
+    if (cb.checked && selected.size >= 3) { cb.checked = false; toast('You can compare up to 3 places'); return; }
+    cb.checked ? selected.add(cb.dataset.cmp) : selected.delete(cb.dataset.cmp);
+    updateCmp(); return;
+  }
+  if (e.target.closest('[data-stop]')) return;
+  const card = e.target.closest('.card');
+  if (card) { const p = places.find(x => x.id === card.dataset.id); map.flyTo([p.lat, p.lng], 16); openForm(p); }
+});
+$('#side').addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('card')) { e.preventDefault(); e.target.click(); }
+});
+function updateCmp() { $('#cmp').disabled = selected.size < 2; $('#cmp').textContent = selected.size ? `Compare (${selected.size})` : 'Compare'; }
+function refresh() { drawMarkers(); drawList(); updateCmp(); }
+
+/* ---------- Add / edit form ---------- */
+const field = (label, name, val, type = 'text', extra = '') =>
+  `<label>${label}<input name="${name}" type="${type}" value="${esc(val)}" ${extra}></label>`;
+
+function openForm(p) {
+  draft = JSON.parse(JSON.stringify(p));
+  const isNew = !places.some(x => x.id === p.id);
+  const dlg = $('#dlg');
+  dlg.innerHTML = `<form method="dialog" id="f">
+    <h2>${isNew ? 'Add place' : 'Edit place'}</h2>
+    ${field('Name or address', 'name', p.name, 'text', 'required')}
+    <div class="two">${field('Price (USD)', 'price', p.price, 'number', 'min="0" step="1000" inputmode="numeric"')}${field('Size (m²)', 'size', p.size, 'number', 'min="0" step="1" inputmode="numeric"')}</div>
+    <div class="two">${field('Bedrooms', 'beds', p.beds, 'number', 'min="0" inputmode="numeric"')}${field('Bathrooms', 'baths', p.baths, 'number', 'min="0" inputmode="numeric"')}</div>
+    <div class="two">${field('Visit date', 'visit', p.visit, 'date')}
+      <label>Status<select name="status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === p.status ? 'selected' : ''}>${v.label}</option>`).join('')}</select></label></div>
+    <div><div style="font-size:13px;font-weight:500;color:var(--muted);margin-bottom:4px" id="rl">Rating</div>
+      <div class="stars" role="group" aria-labelledby="rl">${[1,2,3,4,5].map(n => `<button type="button" data-r="${n}" aria-pressed="${p.rating === n}">${n}</button>`).join('')}</div></div>
+    ${field('Contact (agent, phone)', 'contact', p.contact)}
+    ${field('Listing link', 'link', p.link, 'url', 'placeholder="https://"')}
+    <label>Pros<textarea name="pros">${esc(p.pros)}</textarea></label>
+    <label>Cons<textarea name="cons">${esc(p.cons)}</textarea></label>
+    <div><div style="font-size:13px;font-weight:500;color:var(--muted);margin-bottom:4px">Photos</div>
+      <div class="photos" id="photos"></div>
+      <input type="file" id="phfile" accept="image/*" multiple hidden></div>
+    <div class="count">Pin: ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)} ${p.link ? '' : ''}
+      <button type="button" class="btn" id="mv" style="margin-left:8px">Move pin</button>
+</div>${gLinks(p)}
+    <div class="actions"><button class="btn primary" value="save">Save place</button><button type="button" class="btn" id="cl">Close</button></div>
+    ${isNew ? '' : '<button type="button" class="btn danger" id="del">Delete place</button>'}
+  </form>`;
+  dlg.showModal();
+  drawPhotos();
+  dlg.querySelectorAll('[data-r]').forEach(b => b.onclick = () => {
+    draft.rating = draft.rating === +b.dataset.r ? 0 : +b.dataset.r;
+    dlg.querySelectorAll('[data-r]').forEach(x => x.setAttribute('aria-pressed', +x.dataset.r === draft.rating));
+  });
+  $('#cl').onclick = () => dlg.close();
+  $('#mv').onclick = () => { readForm(); dlg.close(); setPicking(true); toast('Tap the map to set the new pin position'); };
+  if (!isNew) $('#del').onclick = () => {
+    if (!confirm('Delete this place?')) return;
+    places = places.filter(x => x.id !== p.id); selected.delete(p.id); persist(); cloud.remove(p.id); refresh(); dlg.close();
+  };
+  $('#phfile').onchange = async e => {
+    for (const f of e.target.files) { if (draft.photos.length >= MAXPH) { toast('Up to 5 photos per place'); break; } draft.photos.push(await shrink(f)); }
+    drawPhotos();
+  };
+  $('#f').onsubmit = e => {
+    readForm();
+    const i = places.findIndex(x => x.id === draft.id);
+    i >= 0 ? places[i] = draft : places.push(draft);
+    if (persist()) { cloud.save(draft); refresh(); map.flyTo([draft.lat, draft.lng], Math.max(map.getZoom(), 15)); toast('Saved'); }
+  };
+}
+function readForm() {
+  const fd = new FormData($('#f'));
+  ['name','price','size','beds','baths','visit','status','contact','link','pros','cons'].forEach(k => draft[k] = fd.get(k));
+  ['price','size','beds','baths'].forEach(k => draft[k] = draft[k] === '' ? '' : +draft[k]);
+}
+function drawPhotos() {
+  $('#photos').innerHTML = draft.photos.map((s, i) =>
+    `<div class="ph" style="background-image:url('${s}')"><button type="button" aria-label="Remove photo" data-x="${i}">×</button></div>`).join('') +
+    '<button type="button" class="addph" id="addph">+ Add photo</button>';
+  $('#addph').onclick = () => $('#phfile').click();
+  document.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { draft.photos.splice(+b.dataset.x, 1); drawPhotos(); });
+}
+function shrink(file) {
+  return new Promise(res => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 700 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = img.width * k; c.height = img.height * k;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', 0.6));
+    };
+    img.src = url;
+  });
+}
+
+/* ---------- Compare ---------- */
+$('#cmp').onclick = () => {
+  const ps = places.filter(p => selected.has(p.id));
+  const best = (fn, min) => { const v = ps.map(fn).filter(x => x); if (!v.length) return null; return min ? Math.min(...v) : Math.max(...v); };
+  const rows = [
+    ['Price', p => money(p.price), p => p.price, true],
+    ['Size', p => p.size ? p.size + ' m²' : '–', p => p.size, false],
+    ['Price / m²', p => perM2(p) ? '$' + perM2(p).toLocaleString('en-US') : '–', perM2, true],
+    ['Bed / bath', p => `${p.beds || '–'} / ${p.baths || '–'}`],
+    ['Rating', p => p.rating ? p.rating + ' / 5' : '–', p => p.rating, false],
+    ['Status', p => (STATUS[p.status] || {}).label],
+    ['Visited', p => esc(p.visit || '–')],
+    ['Pros', p => esc(p.pros || '–')],
+    ['Cons', p => esc(p.cons || '–')]
+  ];
+  const dlg = $('#dlg');
+  dlg.innerHTML = `<div class="dbody"><h2>Compare</h2><div style="overflow:auto"><table>
+    <tr><th></th>${ps.map(p => `<th>${esc(p.name)}</th>`).join('')}</tr>
+    ${rows.map(([label, show, val, min]) => {
+      const b = val ? best(val, min) : null;
+      return `<tr><td>${label}</td>${ps.map(p => `<td class="${b !== null && val(p) === b && ps.length > 1 ? 'best' : ''}">${show(p)}</td>`).join('')}</tr>`;
+    }).join('')}</table></div>
+    <button class="btn primary" id="cl2">Close</button></div>`;
+  dlg.showModal(); $('#cl2').onclick = () => dlg.close();
+};
+
+/* ---------- Export / import ---------- */
+const exportData = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(places)], {type: 'application/json'}));
+  a.download = 'apartment-hunt-' + today() + '.json'; a.click();
+};
+$('#impfile').onchange = async e => {
+  try {
+    const incoming = JSON.parse(await e.target.files[0].text());
+    incoming.forEach(n => { const i = places.findIndex(x => x.id === n.id); i >= 0 ? places[i] = n : places.push(n); });
+    if (persist()) { incoming.forEach(n => cloud.save(n)); refresh(); toast(`Imported ${incoming.length} place(s)`); }
+  } catch (err) { alert('That file could not be read as an Apartment hunt export.'); }
+  e.target.value = '';
+};
+
+/* ---------- Live sharing (Firebase Firestore) ---------- */
+const SKEY = 'apartment-hunt-share';
+let share = null; try { share = JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) {}
+const cloud = {
+  col: null, state: 'off',
+  save(p) { if (this.col) this.col.doc(p.id).set(p).catch(err => { this.state = 'error'; toast('Could not sync: ' + err.message); }); },
+  remove(id) { if (this.col) this.col.doc(id).delete().catch(() => {}); },
+  load(src) { return new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('Could not load Firebase. Check your connection.')); document.head.appendChild(s); }); },
+  async start() {
+    if (!share || !share.config || !share.code) return;
+    try {
+      const base = 'https://www.gstatic.com/firebasejs/10.12.2/';
+      await this.load(base + 'firebase-app-compat.js'); await this.load(base + 'firebase-firestore-compat.js');
+      firebase.initializeApp(share.config);
+      this.col = firebase.firestore().collection('households').doc(share.code).collection('places');
+      let first = true;
+      this.col.onSnapshot(snap => {
+        const remote = snap.docs.map(d => d.data());
+        if (first) {
+          first = false;
+          const ids = new Set(remote.map(r => r.id)), joined = SKEY + ':' + share.code;
+          if (!localStorage.getItem(joined)) {
+            places.filter(p => !ids.has(p.id)).forEach(p => { this.save(p); remote.push(p); });
+            localStorage.setItem(joined, '1');
+          }
+        }
+        places = remote; persist(); this.state = 'on'; refresh();
+        if (places.length && !view && !this.fitted) { this.fitted = true; map.fitBounds(L.latLngBounds(places.map(p => [p.lat, p.lng])).pad(0.3), {maxZoom: 16}); }
+      }, err => { this.state = 'error'; toast('Sync error: ' + err.message); });
+    } catch (e) { this.state = 'error'; toast(e.message); }
+  }
+};
+const parseConfig = t => { const c = {}; for (const m of t.matchAll(/(\w+)\s*:?\s*["']([^"']*)["']/g)) c[m[1]] = m[2]; return c; };
+
+$('#share').onclick = () => {
+  const dlg = $('#dlg'), on = share && share.code;
+  const stateText = !on ? 'Sharing is off.' : cloud.state === 'on' ? 'Connected: changes sync live.' : cloud.state === 'error' ? 'Not connected. Check your config and rules.' : 'Connecting…';
+  dlg.innerHTML = `<form method="dialog" id="sf"><h2>Share &amp; backup</h2>
+    <p class="count" style="font-size:14px;line-height:1.5;margin:0">Live sharing keeps this list in sync on every phone that uses the same household code, through a free Firebase database that you own. ${stateText}</p>
+    <label>Household code<input name="code" value="${esc(share ? share.code : '')}" placeholder="A long phrase only you two know" autocapitalize="off" autocomplete="off"></label>
+    <label>Firebase config (paste what Firebase shows you)<textarea name="config" placeholder='apiKey: "...", projectId: "..."'>${esc(share && share.config ? JSON.stringify(share.config) : '')}</textarea></label>
+    <div class="actions"><button class="btn primary" value="s">${on ? 'Update sharing' : 'Turn on sharing'}</button><button type="button" class="btn" id="off" ${on ? '' : 'hidden'}>Turn off</button></div>
+    <details><summary>How to set it up (5 minutes, once)</summary><ol>
+      <li>Open console.firebase.google.com and create a project (Analytics not needed).</li>
+      <li>Build, then Firestore Database, then Create database.</li>
+      <li>Open the Rules tab, paste this, and Publish:<pre>rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    match /households/{code}/places/{id} {
+      allow read, write: if true;
+    }
+  }
+}</pre></li>
+      <li>Project settings, then Your apps, then add a Web app and copy its firebaseConfig.</li>
+      <li>Paste it above with your household code. On your partner's phone, paste the same two things.</li></ol>
+      <p>Anyone who knows the household code can read and edit the list, so make it long and keep it private.</p></details>
+    <div class="actions"><button type="button" class="btn" id="exp2">Export backup</button><button type="button" class="btn" id="imp2">Import backup</button><button type="button" class="btn" id="cl3">Close</button></div></form>`;
+  dlg.showModal();
+  $('#cl3').onclick = () => dlg.close();
+  $('#exp2').onclick = exportData;
+  $('#imp2').onclick = () => $('#impfile').click();
+  $('#off').onclick = () => { localStorage.removeItem(SKEY); location.reload(); };
+  $('#sf').onsubmit = e => {
+    const fd = new FormData($('#sf')), code = fd.get('code').trim(), config = parseConfig(fd.get('config'));
+    if (code.length < 6 || !config.apiKey || !config.projectId) {
+      e.preventDefault(); alert('Enter a household code of at least 6 characters and a Firebase config that includes apiKey and projectId.'); return;
+    }
+    localStorage.setItem(SKEY, JSON.stringify({code, config})); location.reload();
+  };
+};
+
+refresh();
+if (places.length && !view) map.fitBounds(L.latLngBounds(places.map(p => [p.lat, p.lng])).pad(0.3), {maxZoom: 16});
+cloud.start();
+</script>
+</body>
+</html>
